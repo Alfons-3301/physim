@@ -2,7 +2,6 @@ from codec.baseClasses import *
 
 import numpy as np
 import galois
-from channels.baseClasses import AbstractCodec
 
 class HammingCode(AbstractCodec):
     def __init__(self, n: int, k: int):
