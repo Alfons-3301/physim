@@ -71,18 +71,18 @@ class MQAMModulation(AbstractModulation):
         normalization_factor = np.sqrt(self.power / E_avg)
         return constellation * normalization_factor
 
-    def modulate(self, input_symbols: np.ndarray) -> np.ndarray:
+    def modulate(self, input_bits: np.ndarray) -> np.ndarray:
         """
         Maps input symbols to QAM constellation points.
         """
-        return self.constellation[input_symbols.astype(int)]
+        return self.constellation[self.bits_to_symbols(input_bits)]
 
     def demodulate(self, received_signal: np.ndarray) -> np.ndarray:
         """
         Demodulates QAM symbols back to d-ary input.
         """
         distances = np.abs(received_signal[:, None] - self.constellation)
-        return np.argmin(distances, axis=1)
+        return self.symbols_to_bits(np.argmin(distances, axis=1))
 
     def symbols_to_bits(self, symbols: np.ndarray) -> np.ndarray:
         """

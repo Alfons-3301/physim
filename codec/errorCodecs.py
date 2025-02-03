@@ -2,73 +2,99 @@ from codec.baseClasses import *
 
 import numpy as np
 import galois
-from channels.baseClasses import AbstractCodec
+from codec.baseClasses import AbstractCodec
+from util.parser import ReedSolomonAdapter
 
-class HammingCode(AbstractCodec):
-    def __init__(self, n: int, k: int):
+class ReedSolomonCodec(AbstractCodec):
+    def __init__(self, n: int, k: int, m : int):
         """
-        Initializes a Hamming code.
+        Initializes the Reed-Solomon codec.
 
         Args:
-            n (int): Codeword length (e.g., 7 for (7,4) Hamming Code).
-            k (int): Message length (e.g., 4 for (7,4) Hamming Code).
+            n (int): Codeword length.
+            k (int): Message length.
         """
-        self.n = n  # Codeword length
-        self.k = k  # Message length
-        self.G = self._generate_generator_matrix()
-        self.H = self._generate_parity_check_matrix()
-        self.field = galois.GF(2)
+        self.n = n
+        self.k = k
+        self.m = m
+        self.parser = ReedSolomonAdapter(k)
+        self.field = galois.GF(2**m)  # Working in GF(256)
+        self.rs = galois.ReedSolomon(n, k, field=self.field)
 
-    def _generate_generator_matrix(self):
+    def _bits_to_symbols(self, bits: np.ndarray) -> np.ndarray:
         """
-        Generates the generator matrix G for the Hamming code.
-        """
-        identity = np.eye(self.k, dtype=int)
-        parity = self._generate_parity_check_matrix()[:, :self.k].T
-        return np.hstack((identity, parity))
+        Converts a bit sequence into integers.
 
-    def _generate_parity_check_matrix(self):
+        Args:
+            bits (np.ndarray): Input bit sequence (1D array).
+
+        Returns:
+            np.ndarray: Array of integers (1D array).
         """
-        Generates the parity-check matrix H for the Hamming code.
+        if len(bits[1]) % self.m != 0:
+            raise ValueError(f"Bit sequence length must be a multiple of {self.m}.")
+        symbols = np.array([int("".join(map(str, block)), 2) for block in bits])
+        return symbols
+    
+
+
+    def _symbols_to_bits(self, symbols: np.ndarray) -> np.ndarray:
         """
-        H = []
-        for i in range(1, 2**self.k):
-            binary_representation = [int(bit) for bit in np.binary_repr(i, width=self.n)]
-            H.append(binary_representation)
-        return np.array(H).T[:, :self.n]
+        Converts symbols in GF(2^m) back to bit blocks of length m.
+        
+        Parameters:
+            symbols (array-like): Array of symbols (integers in GF(2^m)).
+            m (int): Bit length of each block (field size is GF(2^m)).
+        
+        Returns:
+            np.ndarray: A 2D numpy array of shape [B, m], where B is the number of blocks.
+        """
+        # Convert each symbol into its binary representation, padded to m bits
+        bit_blocks = np.array([list(map(int, f"{symbol:0{self.m}b}")) for symbol in symbols])
+        return bit_blocks
 
     def encode(self, input_bits: np.ndarray) -> np.ndarray:
         """
-        Encodes input bits using the Hamming code.
+        Encodes the input bits into a codeword.
 
         Args:
-            input_bits (np.ndarray): Input bits to encode (shape: [m, k]).
+            input_bits (np.ndarray): Input bit sequence as a 1D array.
 
         Returns:
-            np.ndarray: Encoded codewords (shape: [m, n]).
+            np.ndarray: Encoded codeword as a 1D bit array.
         """
-        input_bits = self.field(input_bits)
-        return (input_bits @ self.G) % 2
+        # Convert bits to integers
+        input_integers = self._bits_to_symbols(input_bits)
+        # Convert integers to GF elements
+        #input_gf = self.field(input_integers)
+        # Apply Reed-Solomon encoding
+        adapted_symbols = self.parser.parse(input_integers)
+        encoded_gf = self.rs.encode(adapted_symbols)
+        # Convert GF elements back to integers
+        encoded_integers = np.array(encoded_gf)
+        # Convert integers back to bits
+        return self._symbols_to_bits(encoded_integers.flatten()).flatten()
 
     def decode(self, received_signal: np.ndarray) -> np.ndarray:
         """
-        Decodes received signal using the Hamming code.
+        Decodes the received signal back into the original input bits.
 
         Args:
-            received_signal (np.ndarray): Received noisy codewords (shape: [m, n]).
+            received_signal (np.ndarray): Received codeword as a 1D bit array.
 
         Returns:
-            np.ndarray: Decoded message bits (shape: [m, k]).
+            np.ndarray: Decoded message as a 1D bit array.
         """
-        received_signal = self.field(received_signal)
-        syndromes = (received_signal @ self.H.T) % 2
+        # Convert bits to integers
+        received_integers = self._bits_to_symbols(received_signal)
+        # Apply Reed-Solomon decoding
+        adapted_symbols = received_integers.reshape(-1,self.n)
+        decoded_gf = self.rs.decode(adapted_symbols)
+        decoded_gf = self.parser.reconstruct(decoded_gf)
+        # Convert GF elements back to integers
+        decoded_integers = np.array(decoded_gf)
+        # Convert integers back to bits
+        return self._symbols_to_bits(decoded_integers)
 
-        # Correct errors
-        corrected_codewords = received_signal.copy()
-        for i, syndrome in enumerate(syndromes):
-            if np.any(syndrome):  # Error detected
-                error_index = int("".join(map(str, syndrome)), 2) - 1
-                if 0 <= error_index < self.n:
-                    corrected_codewords[i, error_index] ^= 1  # Flip the bit
 
-        return corrected_codewords[:, :self.k]
+
