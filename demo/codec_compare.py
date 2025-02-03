@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from channels.baseChannels import ComplexAWGNChannel
-from modulation.baseModulation import MQAMModulation
+from channels.baseChannels import ComplexAWGNChannel,AWGNChannel
+from modulation.baseModulation import MQAMModulation,BPSKModulation
 from codec.errorCodecs import ReedSolomonCodec
 from util.parser import BlockParser
 
@@ -21,16 +21,16 @@ def simulate_ber_with_ecc(snr_db_values, n, k, m, M, num_bits):
         encoded_blocks = codec.encode(parsed_blocks)
 
         # MQUAM Modulation
-        mod_parser = BlockParser(block_size=M)
-        modulation = MQAMModulation(M)
-        modulated_signal = modulation.modulate(mod_parser.parse(encoded_blocks))
+        #mod_parser = BlockParser(block_size=M)
+        modulation = BPSKModulation()
+        modulated_signal = modulation.modulate(encoded_blocks)
 
         # AWGN Channel
-        channel = ComplexAWGNChannel(snr_db=snr_db)
+        channel = AWGNChannel(snr_db=snr_db)
         received_signal = channel.transmit(modulated_signal)
 
         # Demodulation
-        demodulated_bits = mod_parser.reconstruct(modulation.demodulate(received_signal))
+        demodulated_bits = modulation.demodulate(received_signal)
 
         # Decode with Reed-Solomon
         decoded_blocks = codec.decode(ecc_parser.parse(demodulated_bits))
@@ -53,15 +53,15 @@ def simulate_ber_no_ecc(snr_db_values, M, num_bits):
 
         # MQUAM Modulation
         mod_parser = BlockParser(block_size=M)
-        modulation = MQAMModulation(M)
-        modulated_signal = modulation.modulate(mod_parser.parse(input_bits))
+        modulation = BPSKModulation()
+        modulated_signal = modulation.modulate(input_bits)
 
         # AWGN Channel
         channel = ComplexAWGNChannel(snr_db=snr_db)
         received_signal = channel.transmit(modulated_signal)
 
         # Demodulation
-        demodulated_bits = mod_parser.reconstruct(modulation.demodulate(received_signal))
+        demodulated_bits = modulation.demodulate(received_signal)
 
         # Calculate BER
         ber = 1 - np.sum(input_bits == demodulated_bits) / len(input_bits) + 1e-15
@@ -74,8 +74,8 @@ if __name__ == "__main__":
     # Parameters
     n, k, m = 15, 9, 4  # Reed-Solomon (n, k, m)
     M = 2**4  # QAM order
-    num_bits = 100000  # Number of bits
-    snr_db_values = np.linspace(1, 20, 40)  # Range of SNR values
+    num_bits = 1000000  # Number of bits
+    snr_db_values = np.linspace(1, 12, 40)  # Range of SNR values
 
     # Simulate BER for both cases
 
