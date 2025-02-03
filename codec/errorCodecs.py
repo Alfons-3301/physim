@@ -14,7 +14,7 @@ class HammingCode(AbstractCodec):
 
     def __init__(self, n: int, k: int, gf: galois.GF = galois.GF2):
         """
-        Initializes a Hamming code.
+        Initializes the Reed-Solomon codec.
 
         Args:
             n (int): Codeword length.

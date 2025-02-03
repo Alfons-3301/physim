@@ -177,3 +177,58 @@ class BAWGNChannel(AbstractContinuousChannel):
             dict: Dictionary containing SNR and noise variance.
         """
         return {"snr_db": self.snr_db, "noise_variance": self.noise_variance}
+
+class BurstErrorChannel(AbstractDiscreteChannel):
+    def __init__(self, burst_length: int, error_probability: float):
+        """
+        Initializes the Burst Error Channel.
+
+        Args:
+            burst_length (int): Length of the burst error.
+            error_probability (float): Probability of a burst occurring.
+        """
+        self.burst_length = burst_length
+        self.error_probability = error_probability
+
+    def transmit(self, input_bits: np.ndarray) -> np.ndarray:
+        """
+        Simulates the transmission of input bits through the burst error channel.
+
+        Args:
+            input_bits (np.ndarray): Input binary sequence.
+
+        Returns:
+            np.ndarray: Output binary sequence with burst errors.
+        """
+        output_bits = input_bits.copy()
+        num_bits = len(input_bits)
+
+        # Determine the number of bursts to introduce
+        num_bursts = np.random.binomial(num_bits, self.error_probability / self.burst_length)
+
+        for _ in range(num_bursts):
+            # Randomly select a start index for the burst
+            start_index = np.random.randint(0, num_bits - self.burst_length + 1)
+            # Flip bits in the burst region
+            output_bits[start_index:start_index + self.burst_length] ^= 1
+
+        return output_bits
+
+    def set_parameters(self, params: dict):
+        """
+        Sets the channel parameters.
+
+        Args:
+            params (dict): Dictionary containing 'burst_length' and 'error_probability'.
+        """
+        self.burst_length = params.get("burst_length", self.burst_length)
+        self.error_probability = params.get("error_probability", self.error_probability)
+
+    def get_parameters(self) -> dict:
+        """
+        Returns the current channel parameters.
+
+        Returns:
+            dict: Dictionary containing the burst length and error probability.
+        """
+        return {"burst_length": self.burst_length, "error_probability": self.error_probability}

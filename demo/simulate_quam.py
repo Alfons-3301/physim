@@ -15,7 +15,7 @@ def simulate_awgn_mqam():
     phase_noise = PhaseNoiseChannel(0*np.pi/16)
 
     # Generate random input bits
-    num_bits = 4 * 4 * 4 * 4 * 4 * 7
+    num_bits = 2**12
     bits_per_symbol = int(np.log2(M))
     print(f"Bits per symbol: {bits_per_symbol}")
 
@@ -25,10 +25,9 @@ def simulate_awgn_mqam():
 
         # Generate input bits and symbols
         input_bits = np.random.randint(0, 2, num_bits)
-        input_symbols = mqam.bits_to_symbols(input_bits)
 
         # Modulate symbols and transmit
-        modulated_signal = mqam.modulate(input_symbols)
+        modulated_signal = mqam.modulate(input_bits)
         received_signal = phase_noise.transmit(channel.transmit(modulated_signal))
 
         # Demodulate symbols and recover bits
@@ -41,7 +40,7 @@ def simulate_awgn_mqam():
 
         print(f"SNR: {snr} dB")
         print(f"Bit Errors: {num_errors}/{num_bits}")
-        print(f"Bit Error Rate (BER): {ber:.4f}")
+        print(f"Bit Error Ratio (BER): {ber:.4f}")
 
         # Visualization: Bits
         plt.figure(figsize=(10, 4))
