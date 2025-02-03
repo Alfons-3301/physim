@@ -74,7 +74,7 @@ if __name__ == "__main__":
     # Parameters
     n, k, m = 15, 9, 4  # Reed-Solomon (n, k, m)
     M = 2**4  # QAM order
-    num_bits = 10000000000  # Number of bits
+    num_bits = 100000  # Number of bits
     snr_db_values = np.linspace(1, 20, 40)  # Range of SNR values
 
     # Simulate BER for both cases
