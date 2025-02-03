@@ -186,6 +186,7 @@ if __name__ == "__main__":
     # Parse the bit sequence into blocks
     blocks = parser.parse(bit_sequence)
     print("Parsed Blocks:\n", blocks)
+    print(f"Shape of Parsed Blocks: {blocks.shape}")
 
     # Reconstruct the bit sequence
     reconstructed_sequence = parser.reconstruct(blocks)
