@@ -58,22 +58,33 @@ class PrivacyAmplification(AbstractCodec):
         V = concat_bits @ self.M_inv
         return self.GF(V)
 
-    def encode(self, message):
+    def encode(self, message: np.ndarray) -> np.ndarray:
         """
         Encodes the message using Privacy Amplification.
         """
         assert len(message) == self.k
 
-        return self._dehash(message)
-    
+        # cast to Galois Field
+        message = self.GF(message)
+        
+        result = self._dehash(message)
+
+        # cast back to numpy array
+        return np.array(result)
+ 
     def decode(self, received_signal):
         """
         Decodes the received signal using Privacy Amplification.
         """
         assert len(received_signal) == self.q
 
-        return self._hash(received_signal)
-    
+        # cast to Galois Field
+        received_signal = self.GF(received_signal)
+
+        result = self._hash(received_signal)
+
+        # cast back to numpy array
+        return np.array(result)
 
     def reset_matrix(self):
         """

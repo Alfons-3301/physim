@@ -82,7 +82,8 @@ class HammingCode(AbstractCodec):
             np.ndarray: 1D array of encoded bits (multiple codewords).
         """
         # 1) Pad input to make it multiple of k
-        padded_bits, self._pad_len = self.padder.pad(input_bits, self.k)
+        padded_bits, self._pad_len = BitPadder.pad(input_bits, self.k)
+
 
         # 2) Reshape to blocks of size k
         block_count = len(padded_bits) // self.k
@@ -91,6 +92,7 @@ class HammingCode(AbstractCodec):
         # 3) Encode each block in GF
         reshaped_gf = self.GF(reshaped)
         codewords = reshaped_gf @ self.G  # (block_count, n)
+        codewords = np.array(codewords)
 
         # 4) Flatten the codewords into a 1D array of bits
         encoded_bits = codewords.view(np.ndarray).astype(int).flatten()
