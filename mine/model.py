@@ -1,3 +1,7 @@
+#InfoNet/baseline/MINE.py
+#by datou30 see: https://github.com/datou30/InfoNet/blob/main/baseline/MINE.py
+
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
