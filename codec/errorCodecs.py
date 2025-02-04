@@ -237,9 +237,170 @@ class ReedSolomonCodec(AbstractCodec):
         # Convert integers back to bits
         return self._symbols_to_bits(decoded_integers)
 
+# (Assume BitPadder is defined elsewhere; if not, a simple implementation is provided below.)
+class BitPadder:
+    @staticmethod
+    def pad(bits: np.ndarray, block_size: int):
+        pad_len = (-len(bits)) % block_size
+        if pad_len:
+            padded = np.concatenate([bits, np.zeros(pad_len, dtype=int)])
+        else:
+            padded = bits.copy()
+        return padded, pad_len
 
+    @staticmethod
+    def unpad(bits: np.ndarray, pad_len: int):
+        if pad_len:
+            return bits[:-pad_len]
+        else:
+            return bits
 
+# -----------------------------------------------------------------------------
+# PolarCode: A simple polar code for the BSC using exhaustive ML decoding.
+# -----------------------------------------------------------------------------
 class PolarCodec(AbstractCodec):
+    """
+    A simple polar-code encoder/decoder for the binary symmetric channel (BSC).
+
+    The encoder accepts 1D input bit arrays (of arbitrary length) and
+    automatically pads to fill blocks of K message bits. Encoding is done
+    using the polar transform F^{\otimes n} (with F = [[1,0],[1,1]]) and by placing
+    the K information bits in the positions determined by a reliability rule.
+    Frozen bits (positions not in the information set) are set to zero.
+
+    The decoder performs maximum-likelihood (ML) decoding by exhaustively searching
+    over the 2^K possible messages. (This brute-force approach is only practical
+    for small values of K.)
+    """
+
+    def __init__(self, N: int, K: int, design_p: float = 0.11):
+        """
+        Initializes the polar-code encoder/decoder.
+
+        Args:
+            N (int): Block length (must be a power of 2).
+            K (int): Number of information bits per block.
+            design_p (float): Design BSC error probability (used in selecting the
+                              information set). (Not used in full detail here.)
+        """
+        if not (N & (N - 1) == 0 and N != 0):
+            raise ValueError("N must be a power of 2.")
+        if K > N:
+            raise ValueError("K must be less than or equal to N.")
+
+        self.N = N
+        self.K = K
+        self.design_p = design_p  # design parameter (for a real polar code, one would compute reliabilities)
+        self.padder = BitPadder()
+
+        # Compute the full polar transformation matrix F^{⊗n} (over GF(2))
+        self.F = self._compute_polar_matrix(self.N)
+
+        # Determine the information set using a simple heuristic.
+        # Here we choose the K rows of F with the highest weight
+        # (i.e. rows with the most ones). For a polar code on the BSC,
+        # higher row-weight tends to indicate a more reliable bit-channel.
+        row_weights = [(i, np.sum(self.F[i, :])) for i in range(self.N)]
+        # Sort in descending order of weight; break ties with the index
+        sorted_rows = sorted(row_weights, key=lambda x: (x[1], x[0]), reverse=True)
+        # Select the indices corresponding to the K most reliable bit-channels
+        info_indices = sorted([i for i, _ in sorted_rows[:self.K]])
+        self.info_set = info_indices
+        self.frozen_set = [i for i in range(self.N) if i not in self.info_set]
+
+    def _compute_polar_matrix(self, N: int) -> np.ndarray:
+        """
+        Computes the polar transformation matrix F^{⊗n} for block length N.
+
+        Args:
+            N (int): Block length (must be a power of 2).
+
+        Returns:
+            np.ndarray: An (N x N) binary matrix.
+        """
+        F = np.array([[1, 0], [1, 1]], dtype=int)
+        n = int(np.log2(N))
+        F_n = F.copy()
+        for _ in range(1, n):
+            F_n = np.kron(F_n, F)
+        # All operations are in GF(2); we use modulo 2 arithmetic.
+        return F_n % 2
+
+    def encode(self, input_bits: np.ndarray) -> np.ndarray:
+        """
+        Encodes input bits using the polar code.
+        Automatically pads the input if it is not a multiple of K.
+
+        Args:
+            input_bits (np.ndarray): 1D array of bits to encode.
+
+        Returns:
+            np.ndarray: 1D array of encoded bits (concatenation of codewords of length N).
+        """
+        # 1) Pad input to make its length a multiple of K.
+        padded_bits, self._pad_len = self.padder.pad(input_bits, self.K)
+
+        # 2) Reshape into blocks of K bits.
+        block_count = len(padded_bits) // self.K
+        messages = padded_bits.reshape(block_count, self.K)
+
+        codewords = []
+        for m in messages:
+            # Construct the full N-length input vector u with frozen bits = 0.
+            u = np.zeros(self.N, dtype=int)
+            # Place the message bits into the positions of the information set.
+            u[self.info_set] = m
+            # Compute the codeword: x = u * F^{⊗n} (mod 2).
+            x = np.mod(np.dot(u, self.F), 2)
+            codewords.append(x)
+        encoded_bits = np.concatenate(codewords)
+        return encoded_bits
+
+    def decode(self, received_bits: np.ndarray) -> np.ndarray:
+        """
+        Decodes the received bits using exhaustive maximum-likelihood (ML) decoding.
+        (This simple decoder is feasible only for small values of K.)
+
+        Args:
+            received_bits (np.ndarray): 1D array of received bits (must be a multiple of N).
+
+        Returns:
+            np.ndarray: 1D array of recovered message bits (with padding removed).
+        """
+        if len(received_bits) % self.N != 0:
+            raise ValueError("Length of received_bits must be a multiple of N.")
+        block_count = len(received_bits) // self.N
+        received_blocks = received_bits.reshape(block_count, self.N)
+        decoded_messages = []
+
+        # Precompute all candidate messages (as binary arrays of length K).
+        num_candidates = 2 ** self.K
+        candidate_msgs = np.array([list(np.binary_repr(i, width=self.K))
+                                   for i in range(num_candidates)], dtype=int)
+
+        # For each candidate message, precompute the corresponding codeword.
+        candidate_codewords = []
+        for m in candidate_msgs:
+            u = np.zeros(self.N, dtype=int)
+            u[self.info_set] = m
+            x = np.mod(np.dot(u, self.F), 2)
+            candidate_codewords.append(x)
+        candidate_codewords = np.array(candidate_codewords)
+
+        # For each received block, find the candidate codeword that minimizes the Hamming distance.
+        for y in received_blocks:
+            # Compute Hamming distances (number of differing bits).
+            distances = np.sum(np.abs(candidate_codewords - y), axis=1)
+            best_idx = np.argmin(distances)
+            best_message = candidate_msgs[best_idx]
+            decoded_messages.append(best_message)
+        decoded_bits = np.concatenate(decoded_messages)
+        # Remove padding that was added during encoding.
+        decoded_bits = self.padder.unpad(decoded_bits, self._pad_len)
+        return decoded_bits
+
+
+class PolarCodec_ingo(AbstractCodec):
     """
     A simple Polar Codec that:
       - Uses a full polar transform with no frozen bits.
