@@ -1,4 +1,5 @@
-from modulation.baseModulation import MQAMModulation
+from sympy import im
+from modulation.baseModulation import MQUAM
 from channels.baseChannels import ComplexAWGNChannel, PhaseNoiseChannel
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,12 +11,12 @@ def simulate_awgn_mqam():
     power = 1.0  # Power constraint
 
     # Initialize Modulation and Channels
-    mqam = MQAMModulation(M, power=power)
+    mqam = MQUAM(M, power=power)
     channel = ComplexAWGNChannel(10)  # Placeholder SNR
     phase_noise = PhaseNoiseChannel(0*np.pi/16)
 
     # Generate random input bits
-    num_bits = 2**12
+    num_bits = 4 * 4 * 4 * 4 * 4 * 7
     bits_per_symbol = int(np.log2(M))
     print(f"Bits per symbol: {bits_per_symbol}")
 
@@ -25,14 +26,18 @@ def simulate_awgn_mqam():
 
         # Generate input bits and symbols
         input_bits = np.random.randint(0, 2, num_bits)
+        #input_symbols = mqam.bits_to_symbols(input_bits)
+        #MOD_CODEC = GrayCodec(bits_per_symbol)
 
+        #input_bits = MOD_CODEC.encode(input_bits)
         # Modulate symbols and transmit
         modulated_signal = mqam.modulate(input_bits)
         received_signal = phase_noise.transmit(channel.transmit(modulated_signal))
 
         # Demodulate symbols and recover bits
-        demodulated_symbols = mqam.demodulate(received_signal)
-        decoded_bits = mqam.symbols_to_bits(demodulated_symbols)
+        decoded_bits = mqam.demodulate(received_signal)
+        #decoded_bits = MOD_CODEC.decode(decoded_bits)
+        #decoded_bits = mqam.symbols_to_bits(demodulated_symbols)
 
         # Compare original and decoded bits
         num_errors = np.sum(input_bits != decoded_bits[:num_bits])
@@ -40,7 +45,7 @@ def simulate_awgn_mqam():
 
         print(f"SNR: {snr} dB")
         print(f"Bit Errors: {num_errors}/{num_bits}")
-        print(f"Bit Error Ratio (BER): {ber:.4f}")
+        print(f"Bit Error Rate (BER): {ber:.4f}")
 
         # Visualization: Bits
         plt.figure(figsize=(10, 4))
