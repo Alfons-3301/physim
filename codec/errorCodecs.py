@@ -514,3 +514,67 @@ class PolarCodec_ingo(AbstractCodec):
         # Convert bits {0,1} into {+1,-1} for sign flipping
         sign_flip = 1 - 2*u_upper_hat  # u=0 -> +1, u=1 -> -1
         return llr_b + sign_flip * llr_a
+    
+class ReedSolomonCodecNew(AbstractCodec):
+    def __init__(self, n, k, m):
+        self.n = n # Length of codeword in symbols
+        self.k = k # Length of message in symbols
+        self.m = m # Bit length of each symbol
+        self.GF = galois.GF(2**m)
+        self.RS = galois.ReedSolomon(n, k, field=self.GF)
+
+        self.powers_of_two = 2**np.arange(m-1, -1, -1) # for converting bits to symbols
+    
+        self.block_length_in = self.k * self.m
+        self.block_length_out = self.n * self.m
+              
+    def encode(self, input_bits):
+        # input is 1-D array of bits of arbitrary length
+
+        # Pad input to make its length a multiple of k
+        input_bits, self._pad_len = BitPadder.pad(input_bits, self.block_length_in)
+
+        # Convert bits to symbols
+        input_symbols = self._bits_to_symbols(input_bits) # shape: (k,)
+
+        # Apply Reed-Solomon encoding
+        reshaped = input_symbols.reshape(-1, self.k)
+        encoded_symbols = self.RS.encode(reshaped)
+        encoded_symbols = np.array(encoded_symbols).flatten()
+
+        # Convert symbols back to bits
+        encoded_bits = self._symbols_to_bits(encoded_symbols) # shape: (m*n,)
+
+        return encoded_bits
+    
+    def decode(self, received_signal):
+        # received_signal shape: (m*n*block_count,)
+        assert len(received_signal) % self.block_length_out == 0, "Length of received_signal must be a multiple of block length."
+
+        # Convert bits to symbols
+        received_symbols = self._bits_to_symbols(received_signal) # shape: (n,)
+
+        # Apply Reed-Solomon decoding
+        reshaped = received_symbols.reshape(-1, self.n)
+        decoded_symbols = self.RS.decode(reshaped)
+        decoded_symbols = np.array(decoded_symbols).flatten()
+
+        # Convert symbols back to bits
+        decoded_bits = self._symbols_to_bits(decoded_symbols)
+        decoded_bits = BitPadder.unpad(decoded_bits, self._pad_len)
+
+        return decoded_bits
+    
+    def _bits_to_symbols(self, bits):
+        # bits shape: (m*k,) for encode, (m*n,) for decode
+        if len(bits) % self.m != 0:
+            raise ValueError(f"Bit sequence length must be a multiple of {self.m}.")
+        num_symbols = len(bits) // self.m
+        chunks = bits.reshape(num_symbols, self.m)
+        symbols = np.dot(chunks, self.powers_of_two)
+        return symbols
+    
+    def _symbols_to_bits(self, symbols):
+        # symbols shape: (n,) for encode, (k,) for decode
+        bits = np.array([list(map(int, f"{symbol:0{self.m}b}")) for symbol in symbols])
+        return bits.flatten()
