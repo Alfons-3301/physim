@@ -399,7 +399,6 @@ class PolarCodec(AbstractCodec):
         decoded_bits = self.padder.unpad(decoded_bits, self._pad_len)
         return decoded_bits
 
-
 class PolarCodec_ingo(AbstractCodec):
     """
     A simple Polar Codec that:
@@ -514,3 +513,150 @@ class PolarCodec_ingo(AbstractCodec):
         # Convert bits {0,1} into {+1,-1} for sign flipping
         sign_flip = 1 - 2*u_upper_hat  # u=0 -> +1, u=1 -> -1
         return llr_b + sign_flip * llr_a
+    
+class PolarCodec_2(AbstractCodec):
+    """
+    A simple polar-code encoder/decoder for the binary symmetric channel (BSC).
+
+    This class serves as a wrapper around the hermespy AFF3CT-based Polar
+    implementations. It follows the style of the example `PolarCodec(AbstractCodec)`.
+    
+    The encoder accepts 1D input bit arrays (of arbitrary length) and automatically
+    pads to fill blocks of K message bits. Encoding is done via the underlying
+    AFF3CT-based Polar SC or Polar SCL coder.
+
+    The decoder uses the SC or SCL algorithm (depending on initialization) to
+    recover the original data bits.
+
+    Assumes that the padding length is always known (and stored here) between encode and decode.
+    """
+
+    def __init__(
+        self,
+        N: int,
+        K: int,
+        design_p: float = 0.11,
+        decoder_type: str = "SCL",
+        num_paths: int = 8
+    ):
+        """
+        Initializes the polar-code encoder/decoder using the hermespy AFF3CT-based
+        Polar classes.
+
+        Args:
+            N (int): Code block size (number of code bits per encoded block).
+            K (int): Data block size (number of data bits per block).
+            design_p (float): Assumed BSC error probability (used internally by AFF3CT).
+            decoder_type (str): 'SC' for successive cancellation or 'SCL' for
+                                successive cancellation list decoding.
+            num_paths (int): Number of decoding paths (only relevant if decoder_type='SCL').
+        """
+        if K > N:
+            raise ValueError("K must be less than or equal to N.")
+
+        self.N = N
+        self.K = K
+        self.design_p = design_p  # an approximate or design BER
+        self._padder = BitPadder()
+
+        # We will store the last pad length used in encode so that decode can unpad properly.
+        self._pad_len = 0
+
+        # Instantiate the underlying AFF3CT-based Polar coder
+        if decoder_type.upper() == "SC":
+            # hermespy Polar Successive Cancellation
+            # constructor signature: PolarSCCoding(data_block_size, code_block_size, ber)
+            from hermespy.fec.aff3ct.polar import PolarSCCoding
+            self._polar_coder = PolarSCCoding(self.K, self.N, self.design_p)
+        elif decoder_type.upper() == "SCL":
+            # hermespy Polar Successive Cancellation List
+            # constructor signature: PolarSCLCoding(data_block_size, code_block_size, ber, num_paths)
+            from hermespy.fec.aff3ct.polar import PolarSCLCoding
+            self._polar_coder = PolarSCLCoding(self.K, self.N, self.design_p, num_paths)
+        else:
+            raise ValueError("Unsupported decoder_type. Use 'SC' or 'SCL'.")
+
+    def encode(self, input_bits: np.ndarray) -> np.ndarray:
+        """
+        Encodes input bits using the hermespy AFF3CT-based Polar coder.
+        Automatically pads the input if it is not a multiple of K.
+
+        Args:
+            input_bits (np.ndarray): 1D array of bits to encode.
+
+        Returns:
+            np.ndarray: 1D array of encoded bits (concatenation of codewords of length N).
+        """
+        # 1) Pad input to make its length a multiple of K.
+        padded_bits, pad_len = self._padder.pad(input_bits, self.K)
+        self._pad_len = pad_len  # Store pad length for later removal in decode.
+
+        # 2) Reshape into blocks of K bits.
+        block_count = len(padded_bits) // self.K
+        data_blocks = padded_bits.reshape(block_count, self.K)
+
+        # 3) Encode each block using the AFF3CT-based coder.
+        encoded_blocks = []
+        for block in data_blocks:
+            # The AFF3CT coder expects an np.ndarray of int32 for encode/decode
+            block_i32 = block.astype(np.int32)
+            encoded_block = self._polar_coder.encode(block_i32)
+            encoded_blocks.append(encoded_block)
+
+        # 4) Concatenate the codewords into a 1D array.
+        encoded_bits = np.concatenate(encoded_blocks)
+        return encoded_bits
+
+    def decode(self, received_bits: np.ndarray) -> np.ndarray:
+        """
+        Decodes the received bits using the hermespy AFF3CT-based Polar coder.
+
+        Args:
+            received_bits (np.ndarray): 1D array of received bits (must be a multiple of N).
+
+        Returns:
+            np.ndarray: 1D array of recovered message bits (with padding removed).
+        """
+        if len(received_bits) % self.N != 0:
+            raise ValueError("Length of received_bits must be a multiple of N.")
+
+        block_count = len(received_bits) // self.N
+        received_blocks = received_bits.reshape(block_count, self.N)
+
+        # 1) Decode each block using the AFF3CT-based coder.
+        decoded_blocks = []
+        for block in received_blocks:
+            block_i32 = block.astype(np.int32)
+            decoded_block = self._polar_coder.decode(block_i32)
+            decoded_blocks.append(decoded_block)
+
+        # 2) Concatenate decoded bits into a single array.
+        decoded_bits_all = np.concatenate(decoded_blocks)
+
+        # 3) Remove the padding that was added during encode, 
+        #    using the known pad length (self._pad_len).
+        decoded_bits = self._padder.unpad(decoded_bits_all, self._pad_len)
+        return decoded_bits
+
+    @property
+    def bit_block_size(self) -> int:
+        """
+        Number of bits within a data block to be encoded.
+        (Equivalent to K.)
+        """
+        return self._polar_coder.bit_block_size
+
+    @property
+    def code_block_size(self) -> int:
+        """
+        Number of bits within a code block to be decoded.
+        (Equivalent to N.)
+        """
+        return self._polar_coder.code_block_size
+
+    @property
+    def enabled(self) -> bool:
+        """
+        Whether this codec is enabled for encoding/decoding.
+        """
+        return self._polar_coder.enabled
