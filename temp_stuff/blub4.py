@@ -124,9 +124,9 @@ def main():
     p_main = 0.1
     p_eve = 0.2
     Z0_main = 2 * np.sqrt(p_main*(1-p_main))
-    n = 10
+    n = 12
     N = 2**n
-    target_error = 1e-4
+    target_error = 1e-6
     Z_main = polar_bhattacharyya(n, Z0_main)
     good_idx, _ = select_good_channels(Z_main, target_error)
     print("Good channels:", len(good_idx))
@@ -149,7 +149,7 @@ def main():
     noise_e = (np.random.rand(N) < p_eve).astype(int)
     z_e = np.mod(x + noise_e, 2)
     # Assume Bob decodes ideally
-    u_hat = u.copy()
+    u_hat = y_b#u.copy()
     rec_key = u_hat[secure_idx]
     print("Recovered key:", rec_key)
     # Leakage estimation at Eve: collect M samples of (S, Z) pairs.

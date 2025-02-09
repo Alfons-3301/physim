@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # Import required modules (adjust import paths as needed)
 from channels.baseChannels import ComplexAWGNChannel  # AWGN channel for both Bob and Eve
 from modulation.baseModulation import MQUAMAntiGray,MQUAM     # Anti-Gray modulator
-from codec.errorCodecs import PolarCodec                # Polar Code encoder/decoder
+from codec.errorCodecs import PolarCodec_2                # Polar Code encoder/decoder
 from util.parser import BlockParser                     # To parse bits for modulation
 
 def simulate_wiretap_polar(snr_bob, snr_eve, N, K_list, M, num_bits):
@@ -39,7 +39,7 @@ def simulate_wiretap_polar(snr_bob, snr_eve, N, K_list, M, num_bits):
         input_bits = np.random.randint(0, 2, size=num_bits, dtype=np.uint8)
         
         # --- Polar Coding ---
-        polar_codec = PolarCodec(N=N, K=K)
+        polar_codec = PolarCodec_2(N=N, K=K)
         encoded_bits = polar_codec.encode(input_bits)
         
         # --- Modulation (Anti-Gray MQUAM) ---
@@ -72,11 +72,11 @@ def simulate_wiretap_polar(snr_bob, snr_eve, N, K_list, M, num_bits):
 
 if __name__ == "__main__":
     # Simulation parameters
-    N_polar = 32               # Polar code block length (must be power of 2)
+    N_polar = 4096               # Polar code block length (must be power of 2)
     # Vary K to adjust the Polar code rate (K/N)
-    K_list = [2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+    K_list = [32,128,256,512,1024,2064,3512]
     M = 16                      # Modulation order (4 for QPSK, here implemented with Anti-Gray MQUAM)
-    num_bits = 4*10000          # Total number of input bits to simulate
+    num_bits = 4*100000          # Total number of input bits to simulate
     
     # Set channel SNRs (in dB)
     snr_bob = 7                # Bob's channel (good)
