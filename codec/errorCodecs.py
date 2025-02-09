@@ -4,6 +4,10 @@ import galois
 from codec.baseClasses import AbstractCodec
 from util.bit_padder import BitPadder
 from util.parser import ReedSolomonAdapter
+import torch
+import math
+from hermespy.fec.aff3ct.bch import BCHCoding
+
 
 class HammingCode(AbstractCodec):
     """
@@ -144,7 +148,6 @@ class HammingCode(AbstractCodec):
         # 5) Unpad to remove the zero bits added during encoding
         recovered_bits = self.padder.unpad(recovered_bits, self._pad_len)
         return recovered_bits
-    
 
 class ReedSolomonCodec(AbstractCodec):
     def __init__(self, n: int, k: int, m : int):
@@ -236,24 +239,6 @@ class ReedSolomonCodec(AbstractCodec):
         decoded_integers = np.array(decoded_gf)
         # Convert integers back to bits
         return self._symbols_to_bits(decoded_integers)
-
-# (Assume BitPadder is defined elsewhere; if not, a simple implementation is provided below.)
-class BitPadder:
-    @staticmethod
-    def pad(bits: np.ndarray, block_size: int):
-        pad_len = (-len(bits)) % block_size
-        if pad_len:
-            padded = np.concatenate([bits, np.zeros(pad_len, dtype=int)])
-        else:
-            padded = bits.copy()
-        return padded, pad_len
-
-    @staticmethod
-    def unpad(bits: np.ndarray, pad_len: int):
-        if pad_len:
-            return bits[:-pad_len]
-        else:
-            return bits
 
 # -----------------------------------------------------------------------------
 # PolarCode: A simple polar code for the BSC using exhaustive ML decoding.
@@ -660,3 +645,53 @@ class PolarCodec_2(AbstractCodec):
         Whether this codec is enabled for encoding/decoding.
         """
         return self._polar_coder.enabled
+
+class BCHCodec(AbstractCodec):
+    def __init__(self, data_block_size: int, code_block_size: int, correction_power: int):
+        """
+        Initialize the BCH codec with the provided parameters.
+
+        Args:
+            data_block_size (int): Number of data bits per block to be encoded.
+            code_block_size (int): Number of code bits per encoded block.
+            correction_power (int): Number of correctable bit errors.
+        """
+        self.data_block_size = data_block_size
+        self.code_block_size = code_block_size
+        self.correction_power = correction_power
+
+        # Create an instance of the AFF3CT BCHCoding class.
+        self._bch = BCHCoding(data_block_size, code_block_size, correction_power)
+
+    def encode(self, input_bits: np.ndarray) -> np.ndarray:
+
+        padded_bits, self._pad_len = BitPadder.pad(input_bits, self.data_block_size)
+
+        block_count = len(padded_bits) // self.data_block_size
+        data_blocks = padded_bits.reshape(block_count, self.data_block_size)
+        data_blocks = data_blocks.astype(np.int32)
+
+        encoded_blocks = []
+        for block in data_blocks:
+            encoded_block = self._bch.encode(block)
+            encoded_blocks.append(encoded_block)
+
+        encoded_bits = np.concatenate(encoded_blocks)
+        return encoded_bits
+
+    def decode(self, received_signal: np.ndarray) -> np.ndarray:
+        if len(received_signal) % self.code_block_size != 0:
+            raise ValueError("Length of received_signal must be multiple of code_block_size.")
+
+        block_count = len(received_signal) // self.code_block_size
+        received_blocks = received_signal.reshape(block_count, self.code_block_size)
+        received_blocks = received_blocks.astype(np.int32)
+
+        decoded_blocks = []
+        for block in received_blocks:
+            decoded_block = self._bch.decode(block)
+            decoded_blocks.append(decoded_block)
+
+        decoded_bits = np.concatenate(decoded_blocks)
+        decoded_bits = BitPadder.unpad(decoded_bits, self._pad_len)
+        return decoded_bits
