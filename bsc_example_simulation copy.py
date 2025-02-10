@@ -28,13 +28,13 @@ def simulate_bsc_with_codec(bits, channel, codec):
 if __name__ == "__main__":
 
     # Simulation parameters
-    num_blocks = 1000
-    n, k = 1023, 523
-    t = 50
+    num_blocks = 100
+    n, k = 4095, 418
+    t = 500
     mu, fish = 300, 310  # mu: input bit vector length; fish: a parameter for PrivacyAmplification
 
     # Channel error probabilities to test
-    p_values = np.linspace(0.0, 0.5, 50)
+    p_values = np.linspace(0.05, 0.2, 100)
     # p_values = [0.0, 0.1, 0.2, 0.25]
 
     # Dictionary to store BER results for each privacy amplification mode
@@ -115,7 +115,7 @@ Simulation Parameters:
     # Plot only the BER for both Privacy Amplification modes versus channel error probability
     plt.figure(figsize=(10, 6))
     for mode_name, ber_list in results.items():
-        plt.plot(p_values, ber_list, marker="o", label=mode_name)
+        plt.semilogy(p_values, ber_list, marker="o", label=mode_name,)
     plt.xlabel("Channel Error Probability (p)")
     plt.ylabel("Bit Error Rate (BER)")
     plt.title("BER vs Channel Error Probability with/without Privacy Amplification")
