@@ -63,9 +63,10 @@ def binary_symmetric_channel_capacity(p):
 if __name__ == "__main__":
     # Example: BSC with p=0.1, blocklength N=1024, target BLER epsilon=1e-3
     p = 0.1
-    N = 4096*8
+    N = 1024
     epsilon = 1e-4
 
     C, V = binary_symmetric_channel_capacity(p)
     K_est = normal_approximation(N, C, V, epsilon)
+    print(f"Capcity: {C}")
     print(f"Estimated K for BSC(p={p}), N={N}, epsilon={epsilon}: {K_est:.2f}")

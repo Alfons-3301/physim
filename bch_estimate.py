@@ -24,7 +24,7 @@ def compute_bch_nearest_rate(desired_rate):
     return possible_values[:10]  # Return the top 10 closest matches
 
 # Example: Desired rate input
-desired_rate = 0.1  # Example target rate
+desired_rate = 0.2  # Example target rate
 nearest_pairs = compute_bch_nearest_rate(desired_rate)
 
 # Display results
