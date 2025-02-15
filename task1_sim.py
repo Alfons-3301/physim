@@ -18,8 +18,8 @@ from codec import errorCodecs
 from codec.privacyAmp import PrivacyAmplification
 from estimators.miEstimator import *
 
-# Global variable for privacy amplification toggle
-privacy_amp_enabled = True
+# Global variable for Hash Then Encode toggle
+hash_then_encode_enabled = True
 # Global reference to the codec instance (so the check button can update it)
 global_codec_bob = None
 
@@ -48,7 +48,7 @@ def simulation_worker(data_queue):
     Run the simulation in a worker thread.
     Updated metrics are sent to the main thread via data_queue.
     """
-    global privacy_amp_enabled, global_codec_bob
+    global hash_then_encode_enabled, global_codec_bob
 
     # --- Simulation parameters ---
     num_blocks = 50000  # (not used explicitly below)
@@ -70,7 +70,7 @@ def simulation_worker(data_queue):
     channel_eve = BinarySymmetricChannel(p_eve)
     
     codec_bob = ProtocolStack(codecs=[
-        PrivacyAmplification(k=mu, q=fish, enable=privacy_amp_enabled),
+        PrivacyAmplification(k=mu, q=fish, enable=hash_then_encode_enabled),
         errorCodecs.BCHCodec(data_block_size=k, code_block_size=n, correction_power=t),
     ])
     # For this simulation, Bob and Eve use the same codec instance.
@@ -99,8 +99,8 @@ def simulation_worker(data_queue):
 
     # --- Simulation loop ---
     for i in range(training_steps):
-        # Check the global flag and update the privacy amplification setting
-        codec_bob.codecs[0].enable = privacy_amp_enabled
+        # Check the global flag and update the Hash Then Encode setting
+        codec_bob.codecs[0].enable = hash_then_encode_enabled
         
         # Generate a batch of random input bits
         input_bits = np.random.randint(0, 2, size=(batch_size, mu), dtype=np.uint8)
@@ -198,21 +198,21 @@ def main():
     fig, axs = plt.subplots(4, 1, figsize=(12, 12))
     plt.subplots_adjust(right=0.75, top=0.9)
 
-    # --- Add CheckButtons widget for Privacy Amplification ---
+    # --- Add CheckButtons widget for Hash Then Encode ---
     # Placed in its own axes on the figure.
     ax_checkbox = fig.add_axes([0.0, 0.0, 0.2, 0.2])  # [left, bottom, width, height]
-    check = CheckButtons(ax_checkbox, ['Privacy Amplification'], [privacy_amp_enabled])
+    check = CheckButtons(ax_checkbox, ['Hash Then Encode'], [hash_then_encode_enabled])
     
-    def toggle_privacy_amp(label):
-        global privacy_amp_enabled, global_codec_bob
+    def toggle_hash_then_encode(label):
+        global hash_then_encode_enabled, global_codec_bob
         # Update the global flag based on the check button status.
-        privacy_amp_enabled = check.get_status()[0]
+        hash_then_encode_enabled = check.get_status()[0]
         # If the simulation has already created the codec, update its flag.
         if global_codec_bob is not None:
-            global_codec_bob.codecs[0].enable = privacy_amp_enabled
-        print("Privacy Amplification Enabled" if privacy_amp_enabled else "Privacy Amplification Disabled")
+            global_codec_bob.codecs[0].enable = hash_then_encode_enabled
+        print("Hash Then Encode Enabled" if hash_then_encode_enabled else "Hash Then Encode Disabled")
     
-    check.on_clicked(toggle_privacy_amp)
+    check.on_clicked(toggle_hash_then_encode)
     
     # Start the simulation in a separate worker thread.
     sim_thread = threading.Thread(target=simulation_worker, args=(data_queue,))
@@ -246,30 +246,49 @@ def main():
             for ax in axs:
                 ax.cla()
 
+            ber_bob_data = np.array(ber_bob_data)
+            ber_eve_data = np.array(ber_eve_data)
+            packet_error_bob_data = np.array(packet_error_bob_data)
+            packet_error_eve_data = np.array(packet_error_eve_data)
+
+            # Define the threshold to replace small values
+            min_value = 1e-5
+
+            # Apply the threshold to avoid zero/negative values in log-scale plots
+            ber_bob_data[ber_bob_data <= min_value] = min_value
+            ber_eve_data[ber_eve_data <= min_value] = min_value
+
+            packet_error_bob_data[packet_error_bob_data < min_value] = min_value
+            packet_error_eve_data[packet_error_eve_data < min_value] = min_value
+
             # --- Plot BER ---
-            axs[0].plot(x_data, ber_bob_data, label="BER Bob", color='blue', alpha=0.7)
-            axs[0].plot(x_data, ber_eve_data, label="BER Eve", color='red', alpha=0.7)
+            axs[0].semilogy(x_data, ber_bob_data, label="BER Bob", color='blue', alpha=0.7)
+            axs[0].semilogy(x_data, ber_eve_data, label="BER Eve", color='red', alpha=0.7)
             if len(ber_bob_data) >= window_size:
                 ma_ber_bob = moving_average(ber_bob_data, window_size)
                 ma_ber_eve = moving_average(ber_eve_data, window_size)
-                axs[0].plot(x_data[window_size-1:], ma_ber_bob, label="MA BER Bob", linestyle='--', color='blue')
-                axs[0].plot(x_data[window_size-1:], ma_ber_eve, label="MA BER Eve", linestyle='--', color='red')
+                axs[0].semilogy(x_data[window_size-1:], ma_ber_bob, label="MA BER Bob", linestyle='--', color='blue')
+                axs[0].semilogy(x_data[window_size-1:], ma_ber_eve, label="MA BER Eve", linestyle='--', color='red')
             axs[0].set_ylabel("Bit Error Rate")
             axs[0].set_title("BER vs. Sent Bits")
             axs[0].legend()
+            axs[0].set_ylim(1e-6, 1) 
+            axs[0].set_yscale('log')
             
             # --- Plot Packet Error Rate ---
-            axs[1].plot(x_data, packet_error_bob_data, label="Packet Error Bob", color='green', alpha=0.7)
-            axs[1].plot(x_data, packet_error_eve_data, label="Packet Error Eve", color='orange', alpha=0.7)
+            axs[1].semilogy(x_data, packet_error_bob_data, label="Packet Error Bob", color='green', alpha=0.7)
+            axs[1].semilogy(x_data, packet_error_eve_data, label="Packet Error Eve", color='orange', alpha=0.7)
             if len(packet_error_bob_data) >= window_size:
                 ma_pkt_err_bob = moving_average(packet_error_bob_data, window_size)
                 ma_pkt_err_eve = moving_average(packet_error_eve_data, window_size)
-                axs[1].plot(x_data[window_size-1:], ma_pkt_err_bob, label="MA Packet Error Bob", linestyle='--', color='green')
-                axs[1].plot(x_data[window_size-1:], ma_pkt_err_eve, label="MA Packet Error Eve", linestyle='--', color='orange')
+                axs[1].semilogy(x_data[window_size-1:], ma_pkt_err_bob, label="MA Packet Error Bob", linestyle='--', color='green')
+                axs[1].semilogy(x_data[window_size-1:], ma_pkt_err_eve, label="MA Packet Error Eve", linestyle='--', color='orange')
             axs[1].set_ylabel("Packet Error Rate")
             axs[1].set_title("Packet Error Rate vs. Sent Bits")
             axs[1].legend()
-            
+            axs[1].set_ylim(1e-6, 1) 
+            axs[1].set_yscale('log')
+
             # --- Plot Mutual Information ---
             axs[2].plot(x_data, mi_bob_data, label="MI Bob", color='purple', alpha=0.7)
             axs[2].plot(x_data, mi_eve_data, label="MI Eve", color='brown', alpha=0.7)

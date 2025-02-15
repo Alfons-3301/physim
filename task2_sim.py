@@ -19,7 +19,7 @@ from codec import errorCodecs
 from codec.privacyAmp import PrivacyAmplification
 from estimators.miEstimator import *
 
-# Global variable for privacy amplification toggle
+# Global variable for Hash Then Encode toggle
 privacy_amp_enabled = True
 # Global reference to the codec instance (so the check button can update it)
 global_codec_bob = None
@@ -60,7 +60,7 @@ def simulation_worker(data_queue):
     snr_bob = 10
     snr_eve = 5
 
-    batch_size = 64
+    batch_size = 32
     hidden_size = math.ceil(1024)
     learning_rate = 0.0005 * 2
     training_steps = 40000
@@ -101,7 +101,7 @@ def simulation_worker(data_queue):
 
     # --- Simulation loop ---
     for i in range(training_steps):
-        # Check the global flag and update the privacy amplification setting
+        # Check the global flag and update the Hash Then Encode setting
         codec_bob.codecs[0].enable = privacy_amp_enabled
         
         # Generate a batch of random input bits
@@ -200,10 +200,10 @@ def main():
     fig, axs = plt.subplots(4, 1, figsize=(12, 12))
     plt.subplots_adjust(right=0.75, top=0.9)
 
-    # --- Add CheckButtons widget for Privacy Amplification ---
+    # --- Add CheckButtons widget for Hash Then Encode ---
     # Placed in its own axes on the figure.
     ax_checkbox = fig.add_axes([0.0, 0.0, 0.2, 0.2])  # [left, bottom, width, height]
-    check = CheckButtons(ax_checkbox, ['Privacy Amplification'], [privacy_amp_enabled])
+    check = CheckButtons(ax_checkbox, ['Hash Then Encode'], [privacy_amp_enabled])
     
     def toggle_privacy_amp(label):
         global privacy_amp_enabled, global_codec_bob
@@ -212,7 +212,7 @@ def main():
         # If the simulation has already created the codec, update its flag.
         if global_codec_bob is not None:
             global_codec_bob.codecs[0].enable = privacy_amp_enabled
-        print("Privacy Amplification Enabled" if privacy_amp_enabled else "Privacy Amplification Disabled")
+        print("Hash Then Encode Enabled" if privacy_amp_enabled else "Hash Then Encode Disabled")
     
     check.on_clicked(toggle_privacy_amp)
     
