@@ -171,7 +171,7 @@ def simulation_worker(data_queue):
         torch.cuda.empty_cache()
         
         # Every 100 iterations, send the updated metrics to the main thread
-        if i % 100 == 0:
+        if i % 5 == 0:
             data_queue.put({
                 'x_data': x_data.copy(),
                 'ber_bob_data': ber_bob_data.copy(),
@@ -184,7 +184,8 @@ def simulation_worker(data_queue):
                 'mi_bob': mi_bob,
                 'mi_eve': mi_eve
             })
-            print(f"Step {i}/{training_steps} | MI Bob: {mi_bob:.4f} | MI Eve: {mi_eve:.4f}")
+            if i > 50:
+                print(f"Step {i}/{training_steps} | MI Bob: {np.mean(mi_bob_data[-50:]):.4f} | MI Eve: {np.mean(mi_eve_data[-50:]):.4f}")
 
     # Signal to the main thread that the simulation is complete
     data_queue.put('DONE')
